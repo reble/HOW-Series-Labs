@@ -1,6 +1,6 @@
 CXX = icpc
-CXXFLAGS=-qopenmp
-CPUFLAGS = $(CXXFLAGS) -xAVX
+CXXFLAGS=-qopenmp -g -O2
+CPUFLAGS = -xHost
 KNCFLAGS = $(CXXFLAGS) -mmic
 KNLFLAGS = $(CXXFLAGS) -xMIC_AVX512 -DKNLTILE
 OPTFLAGS = -qopt-report -qopt-report-file=$@.optrpt
@@ -67,6 +67,9 @@ run-knc: app-KNC
 
 run-knl: app-KNL
 	./app-KNL 
+
+profile-cpu: app-CPU
+	OMP_NUM_THREADS=1 advixe-cl -collect=survey --project-dir ./advi ./app-CPU
 
 queue-cpu: app-CPU
 	echo "`pwd`/app-CPU" | qsub -l nodes=1:xeon -N lab-403-cpu
