@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <omp.h>
 
 void LU_Doolittle(const int n, float* A, float* L) {
@@ -9,13 +10,14 @@ void LU_Doolittle(const int n, float* A, float* L) {
   // On output: 
   //         argument A is the upper triangular matrix U,
   //         argument L is the unit lower triangular matrix L
-  L[0:n*n]=0.0f;
-  for (int b = 0; b < n; b++) {
-    L[b*n + b] = 1.0f;
-    for (int i = b+1; i < n; i++) {
-      L[i*n + b] = A[i*n + b]/A[b*n + b];
-      for (int j = b; j < n; j++) 
-	A[i*n + j] -= L[i*n + b]*A[b*n + j];
+  for(int i = 0; i < n * n; i++ )
+      L[i] = 0.0f;
+  for (int k = 0; k < n; k++) { // k steps
+    L[k*n + k] = 1.0f;
+    for (int i = k+1; i < n; i++) { // over all rows
+      L[i*n + k] = A[i*n + k]/A[k*n + k]; // compute multipliers for current row
+      for (int j = k; j < n; j++) // over all columns
+	    A[i*n + j] -= L[i*n + k]*A[k*n + j]; // apply transformation to remaining submatrix
     }
   }
   L[(n-1)*n + (n-1)] = 1.0f;
@@ -25,7 +27,8 @@ void VerifyResult(const int n, float* U, float* L, float* refA) {
 
   // First, verifying that A=LU
   float A[n*n];
-  A[:] = 0.0f;
+  for(int i = 0; i < n * n; i++ )
+    A[i] = 0.0f;
   for (int i = 0; i < n; i++)
     for (int j = 0; j < n; j++)
       for (int k = 0; k < n; k++)
@@ -136,7 +139,7 @@ int main(const int argc, const char** argv) {
     }
     matrix[n*n] = 0.0f; // Touch just in case
   }
-  referenceMatrix[0:n*n] = ((float*)dataA)[0:n*n];
+  memcpy(referenceMatrix, dataA, n * n * sizeof(float));
   
   // Perform benchmark
   printf("LU decomposition of %d matrices of size %dx%d on %s...\n\n", 
@@ -149,8 +152,8 @@ int main(const int argc, const char** argv) {
 	 );
 
   double rate = 0, dRate = 0; // Benchmarking data
-  const int nTrials = 10;
-  const int skipTrials = 3; // First step is warm-up on Xeon Phi coprocessor
+  const int nTrials = 5;
+  const int skipTrials = 1; // Warm-up steps
   printf("\033[1m%5s %10s %8s\033[0m\n", "Trial", "Time, s", "GFLOP/s");
   for (int trial = 1; trial <= nTrials; trial++) {
 
