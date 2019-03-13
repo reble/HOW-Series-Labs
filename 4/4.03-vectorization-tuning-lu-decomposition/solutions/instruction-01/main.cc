@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <omp.h>
 #include <cassert>
 
@@ -8,13 +9,13 @@ void LU_decomp(const int n, float* const A) {
   // In-place decomposition of form A=LU
   // L is returned below main diagonal of A
   // U is returned at and above main diagonal
-  for (int b = 0; b < n; b++) {
+  for (int k = 0; k < n; k++) {
     // Strength reduction:
-    const float recAbb = 1.0f/A[b*n + b];
-    for (int i = b+1; i < n; i++) {
-      A[i*n + b] = A[i*n + b]*recAbb;
-      for (int j = b+1; j < n; j++) 
-	A[i*n + j] -= A[i*n + b]*A[b*n + j];
+    const float recAbb = 1.0f/A[k*n + k];
+    for (int i = k+1; i < n; i++) {
+      A[i*n + k] = A[i*n + k]*recAbb;
+      for (int j = k+1; j < n; j++)
+	    A[i*n + j] -= A[i*n + k]*A[k*n + j];
     }
   }
 }
@@ -25,9 +26,11 @@ void VerifyResult(const int n, float* LU, float* refA) {
   float A[n*n];
   float L[n*n];
   float U[n*n];
-  A[:] = 0.0f;
-  L[:] = 0.0f;
-  U[:] = 0.0f;
+  for ( int i=0; i<n*n; i++ ) {
+    A[i] = 0.0f;
+    L[i] = 0.0f;
+    U[i] = 0.0f;
+  }
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < i; j++)
       L[i*n + j] = LU[i*n + j];
@@ -119,7 +122,7 @@ int main(const int argc, const char** argv) {
     }
     matrix[(n-1)*n+n] = 0.0f; // Touch just in case
   }
-  referenceMatrix[0:n*n] = ((float*)dataA)[0:n*n];
+  memcpy(referenceMatrix, dataA, n * n * sizeof(float));
   
   // Perform benchmark
   printf("LU decomposition of %d matrices of size %dx%d on %s...\n\n", 
@@ -132,8 +135,8 @@ int main(const int argc, const char** argv) {
 	 );
 
   double rate = 0, dRate = 0; // Benchmarking data
-  const int nTrials = 10;
-  const int skipTrials = 3; // First step is warm-up on Xeon Phi coprocessor
+  const int nTrials = 5;
+  const int skipTrials = 1; // First step is warm-up
   printf("\033[1m%5s %10s %8s\033[0m\n", "Trial", "Time, s", "GFLOP/s");
   for (int trial = 1; trial <= nTrials; trial++) {
 

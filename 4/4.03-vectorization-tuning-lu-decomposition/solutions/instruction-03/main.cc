@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <omp.h>
 #include <cassert>
 
@@ -9,19 +10,14 @@ void LU_decomp(const int n,
   // In-place decomposition of form A=LU
   // L is returned below main diagonal of A
   // U is returned at and above main diagonal
-#ifdef __MIC__
-  const int tile=32;
-#elif KNLTILE
-  const int tile=32;
-#else
   const int tile=8;
-#endif
   assert(n%tile==0);
   // Must store L separately from A
   float L[n*n] __attribute__((aligned(64)));
   for (int i = 0; i < n; i++) {
-    L[i*n:n]=0.0f;
-    L[i*n+i]=1.0f;
+    for (int j = 0; j < n; j++)
+      L[i*n + j] = 0.0f;
+    L[i*n+i] = 1.0f;
   }
   for (int b = 0; b < n; b++) {
     const int jMin = (b+1) - (b+1)%tile;
@@ -29,12 +25,11 @@ void LU_decomp(const int n,
     const float recAbb = 1.0f/A[b*n + b];
     for (int i = b+1; i < n; i++) {
       L[i*n + b] = A[i*n + b]*recAbb;
-      // Aligned data hint:
-#pragma vector aligned
       // Regularized patern of vector loop:
-#pragma simd
+      // Aligned data hint:
+#pragma omp simd aligned(L:64,A:8)
       for (int j = jMin; j < n; j++) 
-	A[i*n + j] -= L[i*n+b]*A[b*n + j];
+	    A[i*n + j] -= L[i*n+b]*A[b*n + j];
     }
   }
   // Copy temp matrix L into matrix A
@@ -49,9 +44,11 @@ void VerifyResult(const int n, float* LU, float* refA) {
   float A[n*n];
   float L[n*n];
   float U[n*n];
-  A[:] = 0.0f;
-  L[:] = 0.0f;
-  U[:] = 0.0f;
+  for ( int i=0; i<n*n; i++ ) {
+    A[i] = 0.0f;
+    L[i] = 0.0f;
+    U[i] = 0.0f;
+  }
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < i; j++)
       L[i*n + j] = LU[i*n + j];
@@ -143,7 +140,7 @@ int main(const int argc, const char** argv) {
     }
     matrix[(n-1)*n+n] = 0.0f; // Touch just in case
   }
-  referenceMatrix[0:n*n] = ((float*)dataA)[0:n*n];
+  memcpy(referenceMatrix, dataA, n * n * sizeof(float));
   
   // Perform benchmark
   printf("LU decomposition of %d matrices of size %dx%d on %s...\n\n", 
@@ -156,8 +153,8 @@ int main(const int argc, const char** argv) {
 	 );
 
   double rate = 0, dRate = 0; // Benchmarking data
-  const int nTrials = 10;
-  const int skipTrials = 3; // First step is warm-up on Xeon Phi coprocessor
+  const int nTrials = 5;
+  const int skipTrials = 1; // First step is warm-up on Xeon Phi coprocessor
   printf("\033[1m%5s %10s %8s\033[0m\n", "Trial", "Time, s", "GFLOP/s");
   for (int trial = 1; trial <= nTrials; trial++) {
 
